@@ -114,10 +114,17 @@ async function mkUser(email,pw,upd){
  var p=await DB.from('profiles').update(upd).eq('id',u.id);if(p.error)throw p.error;
  if(!r.data.session)toast('Akun dibuat, tetapi perlu konfirmasi email. Matikan "Confirm email" di Supabase agar langsung bisa masuk.');
  return u}
-function akunOf(n){var p=PROF.find(function(x){return x.petugas_nama===n});return p?'<span class="tag">Login dengan nama</span>':'<span class="note">belum ada</span>'}
-function akunBox(o){var p=PROF.find(function(x){return x.petugas_nama===o.nama}),i=S.off.indexOf(o);
- return '<div class="box"><h3>Akun login petugas</h3>'+(p?'<p>Nama login: <b>'+esc(o.nama)+'</b></p><p class="note">Petugas masuk dengan nama ini. Kata sandi dapat diganti sendiri lewat tombol Ganti sandi.</p>':'<form onsubmit="return makeAkun(event,'+i+')"><label>Nama login<input value="'+esc(o.nama)+'" disabled></label><label>Kata sandi (min. 6)<input type="password" name="pw" minlength="6" required autocomplete="new-password"></label><button>Buat akun login</button></form><p class="note">Petugas ini belum punya akun. Setelah dibuat, berikan nama dan kata sandi kepada petugas.</p>')+'</div>'}
-function makeAkun(e,i){e.preventDefault();var o=S.off[i],f=new FormData(e.target),pw=f.get('pw');if(!o)return false;var em;try{em=nmEmail(o.nama)}catch(x){return toast(x.message),false}wr(async function(){await mkUser(em,pw,{role:'petugas',petugas_nama:o.nama,nama:o.nama});await sync();toast('Akun login dibuat')});return false}
+function akunOf(n){var c=PROF.filter(function(x){return x.petugas_nama===n}).length;return c?'<span class="tag">'+c+' akun login</span>':'<span class="note">belum ada</span>'}
+function akunBox(o){var A=PROF.filter(function(x){return x.petugas_nama===o.nama}),i=S.off.indexOf(o);
+ var h='<div class="box"><h3>Akun login petugas (maks. 2 orang)</h3>';
+ h+=A.length?table(['Nama login'],A.map(function(p){return [esc(p.nama||'')]})):'<p class="note">Belum ada akun.</p>';
+ if(A.length<2)h+='<form onsubmit="return makeAkun(event,'+i+')" style="margin-top:10px"><label>Nama login petugas ke-'+(A.length+1)+'<input name="ln" value="'+(A.length?'':esc(o.nama))+'" required></label><label>Kata sandi (min. 6)<input type="password" name="pw" minlength="6" required autocomplete="new-password"></label><button>Buat akun login</button></form>';
+ h+='<p class="note">Kedua petugas memakai satu data yang sama: stok, distribusi, penjualan, dan pembayaran dicatat satu kali untuk keduanya.</p></div>';
+ return h}
+function makeAkun(e,i){e.preventDefault();var o=S.off[i],f=new FormData(e.target),pw=f.get('pw'),ln=String(f.get('ln')||'').trim();if(!o)return false;
+ if(PROF.filter(function(x){return x.petugas_nama===o.nama}).length>=2)return toast('Maksimal 2 akun per petugas'),false;
+ var em;try{em=nmEmail(ln)}catch(x){return toast(x.message),false}
+ wr(async function(){await mkUser(em,pw,{role:'petugas',petugas_nama:o.nama,nama:ln});await sync();toast('Akun login dibuat')});return false}
 function adminBox(){var A=PROF.filter(function(p){return p.role==='admin'});
  return '<div class="box"><h3>Akun admin</h3>'+table(['Email','Nama'],A.map(function(p){return [esc(p.email),esc(p.nama||'')]}))+'<form onsubmit="return addAdmin(event)" style="margin-top:10px"><label>Email admin baru<input type="email" name="email" required></label><label>Kata sandi (min. 6)<input type="password" name="pw" minlength="6" required autocomplete="new-password"></label><button>Tambah admin</button></form></div>'}
 function addAdmin(e){e.preventDefault();var f=new FormData(e.target),em=f.get('email').trim(),pw=f.get('pw');wr(async function(){await mkUser(em,pw,{role:'admin',nama:em.split('@')[0]});await sync();toast('Admin ditambahkan')});return false}
