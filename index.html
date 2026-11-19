@@ -42,6 +42,7 @@ details.dd{position:relative}details.dd summary{padding:8px;border:1px solid var
 .kop{display:none}.who{margin-top:14px;padding:10px 4px 0;border-top:1px solid #ffffff33;font-size:13px;display:flex;flex-direction:column;gap:2px}.who small{color:var(--gold)}.who .row{margin:8px 0 0}.who button.s{color:#fff;border-color:#ffffff66;background:none;padding:4px 8px}
 .login{max-width:380px;margin:6vh auto;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:26px;text-align:center}.login img{width:100px;height:auto}.login h2{font-size:17px;margin:10px 0 6px}.login form{grid-template-columns:1fr;text-align:left;margin-top:12px}
 @media(max-width:760px){.who{width:100%;margin-top:6px;padding:6px 0 0}}.rk{display:flex;gap:10px;align-items:center}.ins{margin:0;padding-left:18px}.ins li{margin:5px 0;line-height:1.5}
+@media print{body.pr main>*:not(.kop):not(#rekap){display:none!important}}
 </style></head><body>
 <nav id="nav"></nav><main id="main"></main><div id="toast"></div><div id="strukwrap"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -335,11 +336,25 @@ function jenis(t){return t.type==='dist'&&t.method==='gratis'?'Distribusi Gratis
 var KAT=['Cetak kalender','Transportasi / pengiriman','Konsumsi','Honor / upah','Operasional','Lainnya'];
 function kno(k){return 'KLR-'+String(k.id).padStart(5,'0')}
 function kas(){var m=sum(live().filter(function(t){return t.type==='bayar'}),function(t){return t.amt}),o=sum((S.keluar||[]).filter(function(k){return !k.void}),function(k){return k.amt});return {masuk:m,keluar:o,saldo:m-o}}
-V.kas=function(){var k=kas(),bd=role==='bendahara';
+var rk={from:'',to:''};
+window.addEventListener('afterprint',function(){document.body.classList.remove('pr')});
+function rekap(){var L=(S.keluar||[]).filter(function(k){return !k.void&&(!rk.from||k.ts>=new Date(rk.from).getTime())&&(!rk.to||k.ts<new Date(rk.to).getTime()+864e5)}),m={};
+ KAT.forEach(function(k){m[k]={n:0,t:0}});
+ L.forEach(function(k){var c=k.kategori||'Lainnya';m[c]=m[c]||{n:0,t:0};m[c].n++;m[c].t+=k.amt});
+ var tot=sum(L,function(k){return k.amt});
+ return {rows:Object.keys(m).map(function(c){return {k:c,n:m[c].n,t:m[c].t,p:tot?m[c].t/tot*100:0}}).sort(function(a,b){return b.t-a.t}),tot:tot,n:L.length}}
+function rekapBox(){var r=rekap(),per=(rk.from||rk.to)?(rk.from||'awal')+' s.d. '+(rk.to||'sekarang'):'Semua periode';
+ return '<div class="box" id="rekap"><h3>Rekap pengeluaran per kategori</h3><div class="row"><label>Dari<input type="date" value="'+rk.from+'" onchange="rk.from=this.value;draw()"></label><label>Sampai<input type="date" value="'+rk.to+'" onchange="rk.to=this.value;draw()"></label><button onclick="xlsRekap()">Unduh Excel</button><button onclick="pdfRekap()">Unduh PDF</button></div><p class="note">Periode: '+esc(per)+' · '+r.n+' transaksi (yang dibatalkan tidak dihitung)</p>'
+ +table(['Kategori','Jumlah transaksi','Total','Persentase'],r.rows.map(function(x){return [esc(x.k),x.n,rp(x.t),x.p.toFixed(1)+'%']}).concat([['<b>TOTAL</b>','<b>'+r.n+'</b>','<b>'+rp(r.tot)+'</b>','<b>'+(r.tot?'100%':'0%')+'</b>']]))+'</div>'}
+function xlsRekap(){var r=rekap(),rows=[['Kategori','Jumlah transaksi','Total (Rp)','Persentase']].concat(r.rows.map(function(x){return [x.k,x.n,x.t,x.p.toFixed(1)+'%']}),[['TOTAL',r.n,r.tot,r.tot?'100%':'0%']]);
+ var s='\ufeffsep=,\n'+rows.map(function(a){return a.map(function(c){return '"'+String(c==null?'':c).replace(/"/g,'""')+'"'}).join(',')}).join('\n');
+ var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(s);a.download='rekap-pengeluaran.csv';a.click()}
+function pdfRekap(){document.body.classList.add('pr');window.print()}
+ V.kas=function(){var k=kas(),bd=role==='bendahara';
  var warn=S.kasOk===false?'<div class="box" style="border:2px solid var(--red)"><p><b>Tabel pengeluaran belum ada di database.</b> Jalankan berkas bendahara-setup.sql di Supabase (SQL Editor), lalu klik Muat ulang.</p></div>':'';
  var form=bd?'<div class="box"><h3>Catat pengeluaran</h3><form onsubmit="return addKeluar(event)"><label>Kategori<select name="kat">'+opts(KAT)+'</select></label><label>Nominal (Rp)<input type="number" name="amt" min="1" required></label><label>Keterangan<input name="note" required></label><button>Catat pengeluaran</button></form><p class="note">Waktu dan nama pencatat tercatat otomatis. Pengeluaran tidak boleh melebihi saldo kas (total pembayaran diterima dikurangi pengeluaran sebelumnya). Jika salah catat, minta admin membatalkannya.</p></div>':'';
  var rows=(S.keluar||[]).slice().sort(function(a,b){return b.ts-a.ts}).map(function(x){return [kno(x),dt(x.ts),esc(x.kategori),rp(x.amt),esc(x.note)+(x.void?' <span class="tag r">DIBATALKAN: '+esc(x.void.reason)+'</span>':''),esc(x.admin),(role==='admin'&&!x.void)?'<button class="s" onclick="batalKeluar('+x.id+')">Batalkan</button>':'']});
- return '<h2>Pengeluaran</h2>'+warn+'<div class="row"><button onclick="window.print()">Cetak / simpan PDF</button></div><div class="grid">'+stat('Total penghasilan (pembayaran diterima)',rp(k.masuk))+stat('Total pengeluaran',rp(k.keluar))+stat('Saldo kas',rp(k.saldo))+'</div>'+form+'<div class="box"><h3>Riwayat pengeluaran</h3>'+table(['No','Waktu','Kategori','Nominal','Keterangan','Pencatat',''],rows)+'</div>'};
+ return '<h2>Pengeluaran</h2>'+warn+'<div class="row"><button onclick="window.print()">Cetak / simpan PDF</button></div><div class="grid">'+stat('Total penghasilan (pembayaran diterima)',rp(k.masuk))+stat('Total pengeluaran',rp(k.keluar))+stat('Saldo kas',rp(k.saldo))+'</div>'+form+rekapBox()+'<div class="box"><h3>Riwayat pengeluaran</h3>'+table(['No','Waktu','Kategori','Nominal','Keterangan','Pencatat',''],rows)+'</div>'};
 async function addKeluar(e){e.preventDefault();if(role!=='bendahara'||busy)return false;busy=true;setTimeout(function(){busy=false},2500);
  var f=new FormData(e.target),a=Math.round(+f.get('amt')),note=(f.get('note')||'').trim();
  try{await sync()}catch(x){return fail(x),false}
